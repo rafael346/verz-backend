@@ -1,0 +1,27 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: verz
+          POSTGRES_USER: verz
+          POSTGRES_PASSWORD: verz
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U verz" --health-interval 5s --health-retries 10
+    env:
+      DEBUG: "True"
+      SECRET_KEY: ci-only-key
+      DATABASE_URL: postgres://verz:verz@localhost:5432/verz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - run: pytest
