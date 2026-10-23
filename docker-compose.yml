@@ -20,14 +20,23 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # clearsessions apaga sessões expiradas (o Django não faz isso sozinho); roda a cada 24 h.
-    # shortcut: o loop não é supervisionado (o Docker só vigia o gunicorn); mover para o worker na tarefa 7.
     command: >
-      sh -c "python manage.py migrate || exit 1;
-      (while true; do python manage.py clearsessions; sleep 86400; done) &
+      sh -c "python manage.py migrate &&
       exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --no-control-socket --workers 1 --threads 8"
     ports:
       - "8000:8000"
+
+  # Encerra e liquida lotes vencidos (D05) e limpa sessões expiradas a cada 24 h.
+  worker:
+    build: .
+    env_file: .env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started  # o backend aplica as migrações; até lá o loop só registra a falha e tenta de novo
+    command: python manage.py run_settlement
+    restart: unless-stopped
 
 volumes:
   pgdata:

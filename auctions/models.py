@@ -100,3 +100,16 @@ class Bid(models.Model):
             models.UniqueConstraint(fields=["lot", "sequence"], name="bid_unique_sequence"),
             models.CheckConstraint(condition=Q(amount__gt=0), name="bid_positive_amount"),
         ]
+
+
+class Receipt(models.Model):
+    """Comprovante de arremate. Público pelo token; identifica o vencedor só pelo pseudônimo (D09)."""
+
+    lot = models.OneToOneField(Lot, on_delete=models.PROTECT, related_name="receipt")
+    token = models.CharField(max_length=32, unique=True)
+    winner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="receipts")
+    winner_alias = models.CharField(max_length=20)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    head_hash = models.CharField(max_length=64)  # último hash da cadeia no encerramento (âncora externa)
+    issued_at = models.DateTimeField(default=timezone.now)
+    signature = models.CharField(max_length=64)

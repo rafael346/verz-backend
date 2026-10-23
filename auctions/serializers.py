@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
-from .models import Bid, Lot, Phase
+from .models import Bid, Lot, Phase, Status
 
 CLOCK_SKEW = timedelta(minutes=1)
 MIN_DURATION = timedelta(minutes=1)
@@ -77,8 +77,17 @@ class LotSerializer(serializers.ModelSerializer):
 
 
 class SellerLotSerializer(LotSerializer):
+    result = serializers.SerializerMethodField()
+
     class Meta(LotSerializer.Meta):
-        fields = LotSerializer.Meta.fields + ["external_id", "status", "created_at"]
+        fields = LotSerializer.Meta.fields + ["external_id", "status", "created_at", "result"]
+
+    def get_result(self, lot):
+        """Resultado do lote encerrado: arrematado e por quanto (None enquanto não liquidado)."""
+        if lot.status != Status.SETTLED:
+            return None
+        receipt = getattr(lot, "receipt", None)  # sem comprovante: fechou sem lances
+        return {"sold": receipt is not None, "amount": f"{receipt.amount:.2f}" if receipt else None}
 
 
 class ShowcaseParams(serializers.Serializer):
@@ -104,9 +113,14 @@ class BidSerializer(serializers.ModelSerializer):
 
 class ParticipationSerializer(LotSerializer):
     my_status = serializers.SerializerMethodField()
+    receipt_token = serializers.SerializerMethodField()
 
     class Meta(LotSerializer.Meta):
-        fields = LotSerializer.Meta.fields + ["my_status"]
+        fields = LotSerializer.Meta.fields + ["my_status", "receipt_token"]
+
+    def get_receipt_token(self, lot):
+        receipt = getattr(lot, "receipt", None)
+        return receipt.token if receipt and receipt.winner_id == self.context["request"].user.pk else None
 
     def get_my_status(self, lot):
         leading = lot.leader_id == self.context["request"].user.pk

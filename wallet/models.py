@@ -16,6 +16,8 @@ class Wallet(models.Model):
 
 class EntryKind(models.TextChoices):
     DEPOSIT = "deposit", "Depósito"
+    SETTLEMENT_DEBIT = "settlement_debit", "Débito de arremate"
+    SETTLEMENT_CREDIT = "settlement_credit", "Crédito de venda"
 
 
 class LedgerEntry(models.Model):
@@ -23,8 +25,13 @@ class LedgerEntry(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)  # com sinal: crédito > 0, débito < 0
     kind = models.CharField(max_length=20, choices=EntryKind.choices)
     created_at = models.DateTimeField(auto_now_add=True)
+    lot = models.ForeignKey("auctions.Lot", on_delete=models.PROTECT, null=True, blank=True,
+                            related_name="ledger_entries")
 
     class Meta:
         constraints = [
             models.CheckConstraint(condition=~Q(amount=0), name="ledger_amount_not_zero"),
+            # Um débito e um crédito por lote, no máximo: o banco impede liquidar duas vezes.
+            models.UniqueConstraint(fields=["lot", "kind"], condition=Q(lot__isnull=False),
+                                    name="ledger_one_settlement_entry_per_lot"),
         ]

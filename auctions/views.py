@@ -1,5 +1,7 @@
+from decimal import Decimal
+
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -15,9 +17,10 @@ from accounts.models import Role
 from accounts.permissions import IsBidder, IsSeller
 from catalog import met
 from catalog.views import UNAVAILABLE
+from wallet.models import EntryKind, LedgerEntry
 
 from . import bidding, integrity
-from .models import Bid, Lot, Phase, Status
+from .models import Bid, Lot, Phase, Receipt, Status
 from .serializers import (AuditBidSerializer, BidCreateSerializer, BidSerializer, LotCreateSerializer,
                           LotSerializer, ParticipationSerializer, SellerLotSerializer, ShowcaseParams)
 
@@ -147,7 +150,8 @@ class SellerLotsView(APIView):
     permission_classes = [IsSeller]
 
     def get(self, request):
-        lots = Lot.objects.filter(seller=request.user).defer("image").order_by("-created_at", "-id")
+        lots = (Lot.objects.filter(seller=request.user).select_related("receipt").defer("image")
+                .order_by("-created_at", "-id"))
         return paginated(request, self, lots, SellerLotSerializer)
 
 
@@ -184,5 +188,40 @@ class ParticipatingLotsView(APIView):
 
     def get(self, request):
         lots = (Lot.objects.filter(pk__in=Bid.objects.filter(bidder=request.user).values("lot"))
-                .exclude(status=Status.CANCELLED).defer("image").order_by("-ends_at", "-id"))
+                .exclude(status=Status.CANCELLED).select_related("receipt").defer("image")
+                .order_by("-ends_at", "-id"))
         return paginated(request, self, lots, ParticipationSerializer)
+
+
+class ReceiptView(APIView):
+    """Comprovante público: quem tem o link vê o arremate e confere a autenticidade."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        receipt = get_object_or_404(Receipt.objects.select_related("lot").defer("lot__image"), token=token)
+        lot = receipt.lot
+        problems, _, head = integrity.verify(lot)
+        return Response({
+            "token": receipt.token,
+            "issued_at": receipt.issued_at,
+            "amount": f"{receipt.amount:.2f}",
+            "winner_alias": receipt.winner_alias,
+            "head_hash": receipt.head_hash,
+            "lot": {"id": lot.pk, "title": lot.title, "artist": lot.artist, "image_url": f"/api/lots/{lot.pk}/image/"},
+            "authentic": integrity.receipt_is_authentic(receipt),
+            "audit": {"intact": not problems, "head_matches": head == receipt.head_hash,
+                      "url": f"/api/lots/{lot.pk}/audit/"},
+        })
+
+
+class SellerSummaryView(APIView):
+    permission_classes = [IsSeller]
+
+    def get(self, request):
+        lots = Lot.objects.filter(seller=request.user, status=Status.SETTLED)
+        received = (LedgerEntry.objects.filter(wallet__user=request.user, kind=EntryKind.SETTLEMENT_CREDIT)
+                    .aggregate(total=Sum("amount"))["total"] or Decimal("0.00"))
+        return Response({"total_received": f"{received:.2f}",
+                         "sold": lots.filter(receipt__isnull=False).count(),
+                         "unsold": lots.filter(receipt__isnull=True).count()})

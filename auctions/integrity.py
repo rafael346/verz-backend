@@ -72,3 +72,12 @@ def verify(lot):
         problems.append("O selo do lote não confere: o estado do lote (lance atual, líder, prazos, valores ou "
                         "contagem de lances) foi alterado, ou lances foram removidos do fim.")
     return problems, rows, prev
+
+
+def receipt_signature(receipt):
+    return _mac("receipt", receipt.token, receipt.lot_id, receipt.winner_alias, _money(receipt.amount),
+                receipt.head_hash, _iso(receipt.issued_at))
+
+
+def receipt_is_authentic(receipt):
+    return _same(receipt.signature, receipt_signature(receipt))
