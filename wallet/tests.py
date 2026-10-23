@@ -28,7 +28,7 @@ def test_every_new_user_gets_a_wallet_with_zero_balance(role):
     user = make_user(role=role)
 
     assert user.wallet.balance() == Decimal("0.00")
-    assert client_for(user).get("/api/wallet/").json() == {"balance": "0.00"}
+    assert client_for(user).get("/api/wallet/").json() == {"balance": "0.00", "committed": "0.00", "available": "0.00"}
 
 
 def test_deposits_add_up_in_the_balance():
@@ -38,8 +38,8 @@ def test_deposits_add_up_in_the_balance():
     second = client.post("/api/wallet/deposit/", {"amount": "5.25"}, format="json")
 
     assert first.status_code == second.status_code == 201
-    assert second.json() == {"balance": "15.75"}
-    assert client.get("/api/wallet/").json() == {"balance": "15.75"}
+    assert second.json() == {"balance": "15.75", "committed": "0.00", "available": "15.75"}
+    assert client.get("/api/wallet/").json() == {"balance": "15.75", "committed": "0.00", "available": "15.75"}
     assert LedgerEntry.objects.filter(kind=EntryKind.DEPOSIT).count() == 2
 
 
@@ -80,7 +80,7 @@ def test_users_only_see_their_own_balance():
     ana, bia = make_user("ana@example.com"), make_user("bia@example.com")
     client_for(ana).post("/api/wallet/deposit/", {"amount": "50.00"}, format="json")
 
-    assert client_for(bia).get("/api/wallet/").json() == {"balance": "0.00"}
+    assert client_for(bia).get("/api/wallet/").json() == {"balance": "0.00", "committed": "0.00", "available": "0.00"}
 
 
 def test_ledger_entries_cannot_be_changed_or_deleted_even_with_raw_orm():

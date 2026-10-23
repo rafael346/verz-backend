@@ -122,5 +122,6 @@ REST_FRAMEWORK = {
         "register": "10/hour",
         "catalog": "30/min",  # cada busca vira até 13 chamadas ao museu
         "lot_create": "60/hour",  # cada criação baixa a imagem da obra
+        "bid": "30/min",
     },
 }

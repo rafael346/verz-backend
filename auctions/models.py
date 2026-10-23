@@ -54,6 +54,11 @@ class Lot(models.Model):
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField()
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    # Estado do leilão, só alterado por bidding.place_bid() com o lote travado.
+    current_bid = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    leader = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                               related_name="leading_lots")
+    bid_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = LotQuerySet.as_manager()
@@ -71,3 +76,22 @@ class Lot(models.Model):
         if self.status == Status.SETTLED or now >= self.ends_at:
             return Phase.ENDED
         return Phase.LIVE if now >= self.starts_at else Phase.SCHEDULED
+
+    def min_next_bid(self):
+        return self.starting_bid if self.current_bid is None else self.current_bid + self.min_increment
+
+
+class Bid(models.Model):
+    lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name="bids")
+    bidder = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="bids")
+    # Pseudônimo por lote (D09), gravado no lance: não muda se a SECRET_KEY mudar.
+    bidder_alias = models.CharField(max_length=20)
+    sequence = models.PositiveIntegerField()
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["lot", "sequence"], name="bid_unique_sequence"),
+            models.CheckConstraint(condition=Q(amount__gt=0), name="bid_positive_amount"),
+        ]

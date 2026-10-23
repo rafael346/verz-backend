@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsBidder
+from auctions.bidding import committed_amount
 
 from .models import EntryKind, LedgerEntry
 from .serializers import DepositSerializer
@@ -10,7 +11,9 @@ from .serializers import DepositSerializer
 
 def balance_payload(wallet):
     # Texto com 2 casas: o encoder do DRF converteria Decimal em float e perderia precisão.
-    return {"balance": f"{wallet.balance():.2f}"}
+    balance = wallet.balance()
+    committed = committed_amount(wallet.user)
+    return {"balance": f"{balance:.2f}", "committed": f"{committed:.2f}", "available": f"{balance - committed:.2f}"}
 
 
 class WalletView(APIView):
