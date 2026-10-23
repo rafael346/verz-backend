@@ -11,6 +11,7 @@ from accounts.models import Role
 from wallet.models import EntryKind, LedgerEntry
 
 from . import integrity
+from .bidding import bidder_alias
 from .models import Bid, Lot, Status
 from .tests import client_for, ended, live, make_lot, make_user, scheduled, seller  # noqa: F401 (fixture)
 
@@ -259,10 +260,13 @@ def test_detail_tells_each_bidder_if_winning_or_outbid_and_position(seller, ana,
     bid(bia, lot, "110.00")
     url = f"/api/lots/{lot.pk}/"
 
-    assert client_for(ana).get(url).json()["me"] == {"status": "outbid", "position": 2, "bidders": 2}
-    assert client_for(bia).get(url).json()["me"] == {"status": "winning", "position": 1, "bidders": 2}
-    assert client_for(new_bidder("c@example.com")).get(url).json()["me"] == {
-        "status": "none", "position": None, "bidders": 2}
+    carla = new_bidder("c@example.com")
+    assert client_for(ana).get(url).json()["me"] == {
+        "status": "outbid", "position": 2, "bidders": 2, "alias": bidder_alias(lot.pk, ana.pk)}
+    assert client_for(bia).get(url).json()["me"] == {
+        "status": "winning", "position": 1, "bidders": 2, "alias": bidder_alias(lot.pk, bia.pk)}
+    assert client_for(carla).get(url).json()["me"] == {
+        "status": "none", "position": None, "bidders": 2, "alias": bidder_alias(lot.pk, carla.pk)}
     assert APIClient().get(url).json()["me"] is None
 
 

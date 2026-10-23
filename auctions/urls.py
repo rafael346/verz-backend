@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.urls import path
 
-from . import views
+from . import events, views
 
 urlpatterns = [
     # Sem transação aberta enquanto a criação espera o museu.
@@ -14,4 +14,5 @@ urlpatterns = [
     path("<int:pk>/image/", views.lot_image),
     path("<int:pk>/cancel/", views.LotCancelView.as_view()),
     path("<int:pk>/audit/", views.LotAuditView.as_view()),
+    path("<int:pk>/events/", events.lot_events),
 ]

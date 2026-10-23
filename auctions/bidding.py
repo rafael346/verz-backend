@@ -9,7 +9,7 @@ from django.utils.crypto import salted_hmac
 
 from wallet.models import Wallet
 
-from . import integrity
+from . import events, integrity
 from .models import Bid, Lot, Phase, Status
 
 ANTI_SNIPING_WINDOW = timedelta(minutes=2)
@@ -71,4 +71,5 @@ def place_bid(lot_id, user, amount):
         lot.ends_at += ANTI_SNIPING_EXTENSION
     integrity.reseal(lot, bid.hash)
     lot.save(update_fields=["current_bid", "leader", "bid_count", "ends_at", "seal"])
+    events.notify(lot.pk, "bid", bid.sequence)
     return bid, lot

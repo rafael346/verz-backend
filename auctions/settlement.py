@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from wallet.models import EntryKind, LedgerEntry, Wallet
 
-from . import integrity
+from . import events, integrity
 from .models import Lot, Receipt, Status
 
 logger = logging.getLogger(__name__)
@@ -65,4 +65,5 @@ def settle_lot(lot_id):
     lot.status = Status.SETTLED
     integrity.reseal(lot, head)
     lot.save(update_fields=["status", "seal"])
+    events.notify(lot.pk, "closed")
     return outcome

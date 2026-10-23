@@ -19,7 +19,7 @@ from catalog import met
 from catalog.views import UNAVAILABLE
 from wallet.models import EntryKind, LedgerEntry
 
-from . import bidding, integrity
+from . import bidding, events, integrity
 from .models import Bid, Lot, Phase, Receipt, Status
 from .serializers import (AuditBidSerializer, BidCreateSerializer, BidSerializer, LotCreateSerializer,
                           LotSerializer, ParticipationSerializer, SellerLotSerializer, ShowcaseParams)
@@ -93,10 +93,12 @@ def my_standing(lot, user):
         return None
     ranking = list(lot.bids.values("bidder").annotate(top=Max("amount")).order_by("-top")
                    .values_list("bidder", flat=True))
+    # alias: o pseudônimo do próprio usuário no lote, para a sala ao vivo saber quais lances são dele.
+    alias = bidding.bidder_alias(lot.pk, user.pk)
     if user.pk not in ranking:
-        return {"status": "none", "position": None, "bidders": len(ranking)}
+        return {"status": "none", "position": None, "bidders": len(ranking), "alias": alias}
     return {"status": "winning" if lot.leader_id == user.pk else "outbid",
-            "position": ranking.index(user.pk) + 1, "bidders": len(ranking)}
+            "position": ranking.index(user.pk) + 1, "bidders": len(ranking), "alias": alias}
 
 
 @require_GET
@@ -126,6 +128,7 @@ class LotCancelView(APIView):
         lot.status = Status.CANCELLED
         integrity.reseal(lot)
         lot.save(update_fields=["status", "seal"])
+        events.notify(lot.pk, "cancelled")
         return Response(SellerLotSerializer(lot).data)
 
 

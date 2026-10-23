@@ -11,6 +11,7 @@ RUN useradd --no-create-home app && chown -R app /app
 USER app
 
 EXPOSE 8000
-# Threads: uma requisição lenta (ex.: museu demorando) não trava as demais.
-# Um só processo: os limites de tentativa usam cache em memória, compartilhado só entre threads.
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--no-control-socket", "--workers", "1", "--threads", "8"]
+# ASGI: o tempo real (SSE) mantém conexões abertas sem prender uma thread cada; as views síncronas rodam em threads.
+# Um só processo: os limites de tentativa usam cache em memória. --no-proxy-headers: o IP do cliente é decidido
+# pelo NUM_PROXIES do DRF, não pelo uvicorn.
+CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-server-header"]
