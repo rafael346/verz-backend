@@ -6,7 +6,8 @@ services:
       POSTGRES_USER: verz
       POSTGRES_PASSWORD: verz
     ports:
-      - "5432:5432"
+      # Só no loopback: com a senha padrão, publicar em todas as interfaces abria o banco para a rede local.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +22,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "python manage.py migrate &&
+      sh -c "python manage.py migrate && python manage.py createcachetable &&
       exec uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --no-proxy-headers --no-server-header"
     # Sem porta pública: o acesso é só pelo nginx, que define o IP real do cliente (NUM_PROXIES=1).
 

@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal
 
 from django.db import transaction
@@ -23,6 +24,8 @@ from . import bidding, events, integrity
 from .models import Bid, Lot, Phase, Receipt, Status
 from .serializers import (AuditBidSerializer, BidCreateSerializer, BidSerializer, LotCreateSerializer,
                           LotSerializer, ParticipationSerializer, SellerLotSerializer, ShowcaseParams)
+
+security = logging.getLogger("verz.security")
 
 SNAPSHOT_FIELDS = ["title", "artist", "date", "medium", "dimensions", "culture", "department", "source_url"]
 TERMS_FIELDS = ["starting_bid", "min_increment", "starts_at", "ends_at"]
@@ -140,6 +143,8 @@ class LotAuditView(APIView):
     def get(self, request, pk):
         lot = get_object_or_404(Lot.objects.defer("image"), pk=pk)
         problems, rows, head = integrity.verify(lot)
+        if problems:
+            security.error("auditoria_falhou lote=%s problemas=%d", lot.pk, len(problems))
         return Response({
             "lot": {**LotSerializer(lot).data, "status": lot.status},
             "intact": not problems,

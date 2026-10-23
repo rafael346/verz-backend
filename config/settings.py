@@ -14,6 +14,9 @@ SECRET_KEY = env("SECRET_KEY")
 AUDIT_HMAC_KEY = env("AUDIT_HMAC_KEY")
 if len(AUDIT_HMAC_KEY) < 32:
     raise ImproperlyConfigured("AUDIT_HMAC_KEY precisa ter pelo menos 32 caracteres.")
+# Chave copiada do .env.docker.example é pública: com ela, quem altera o banco refaz a cadeia (OWASP A02).
+if not DEBUG and any(key.startswith("troque") for key in (SECRET_KEY, AUDIT_HMAC_KEY)):
+    raise ImproperlyConfigured("SECRET_KEY e AUDIT_HMAC_KEY ainda têm o valor de exemplo; gere chaves novas.")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
@@ -66,6 +69,18 @@ TEMPLATES = [
 DATABASES = {"default": env.db("DATABASE_URL")}
 DATABASES["default"]["ATOMIC_REQUESTS"] = True
 
+# Cache no próprio Postgres (D27): sobrevive a reinícios (a busca no Met não refaz rajadas, D23) e é o mesmo
+# para todos os processos (os limites de tentativa valem juntos). A tabela é criada por `createcachetable`.
+# shortcut: grava dentro da transação da requisição (ATOMIC_REQUESTS), então duas buscas simultâneas pelas mesmas
+# obras esperam uma a outra até a primeira terminar; com muito tráfego, conexão própria para o cache ou Redis.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "verz_cache",
+        "OPTIONS": {"MAX_ENTRIES": 20000},  # ~13 obras por página de busca, cada uma guardada por 24 h
+    }
+}
+
 # Argon2 primeiro (OWASP); os demais só validam hashes antigos.
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
@@ -80,6 +95,17 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+
+# Eventos de segurança (OWASP A09, ASVS 16.3) no stderr do contêiner: login falho, lance recusado por integridade,
+# auditoria com problema. Nunca senha nem e-mail em claro.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {"verz.security": {"level": "INFO"}},  # sobe para o console do root
+}
 
 LANGUAGE_CODE = "pt-br"
 TIME_ZONE = "UTC"
@@ -115,10 +141,10 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ],
     # Proxies confiáveis à frente do Django. 0 = usa o IP do socket (seguro quando o backend
-    # é acessível direto). Atrás do proxy do Next.js, defina NUM_PROXIES=1 e não publique o
-    # backend para fora; com 1 e sem proxy, X-Forwarded-For forjado burla os limites.
+    # é acessível direto). Atrás do nginx (D21), NUM_PROXIES=1 e o backend sem porta pública;
+    # com 1 e sem proxy, X-Forwarded-For forjado burla os limites.
     "NUM_PROXIES": env.int("NUM_PROXIES", default=0),
-    # shortcut: contadores no cache local (por processo); com vários workers use Redis/DB cache.
+    # Contadores no cache do Postgres, compartilhados entre processos.
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/min",
         "user": "240/min",

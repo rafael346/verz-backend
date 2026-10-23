@@ -72,6 +72,14 @@ def test_login_failure_does_not_reveal_whether_email_exists(api):
     assert wrong_pw.json() == no_user.json()
 
 
+def test_failed_login_is_logged_without_the_email(api, caplog):
+    api.post("/api/auth/login/", {"email": "ana@example.com", "password": "errada-1234"}, format="json")
+
+    [record] = [r for r in caplog.records if r.name == "verz.security"]
+    assert record.getMessage().startswith("login_falhou ip=")
+    assert "ana@example.com" not in record.getMessage() and "errada" not in record.getMessage()
+
+
 def test_login_is_rate_limited(api):
     for _ in range(5):
         api.post("/api/auth/login/", {"email": "a@example.com", "password": "x"}, format="json")

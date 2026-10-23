@@ -1,4 +1,5 @@
 """Regras de lance (D08). Tudo numa transação, com o lote e a carteira travados."""
+import logging
 from datetime import timedelta
 from decimal import Decimal
 
@@ -11,6 +12,8 @@ from wallet.models import Wallet
 
 from . import events, integrity
 from .models import Bid, Lot, Phase, Status
+
+security = logging.getLogger("verz.security")
 
 ANTI_SNIPING_WINDOW = timedelta(minutes=2)
 ANTI_SNIPING_EXTENSION = timedelta(minutes=2)
@@ -45,6 +48,7 @@ def place_bid(lot_id, user, amount):
     head = integrity.head_of(lot)
     if not integrity.seal_matches(lot, head):
         # Nunca construir em cima de adulteração: o próximo selo a esconderia.
+        security.error("lance_recusado_integridade lote=%s licitante=%s", lot.pk, user.pk)
         raise BidRejected("integrity_error", "Lote bloqueado para lances: a auditoria encontrou uma falha de integridade.")
     phase = lot.phase(now)
     if phase == Phase.SCHEDULED:

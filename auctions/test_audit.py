@@ -80,6 +80,16 @@ def test_changed_amount_is_detected(disputed):
     assert any("#2" in problem for problem in report["problems"])
 
 
+def test_detected_tampering_is_logged(disputed, bia, caplog):
+    Lot.objects.filter(pk=disputed.pk).update(leader=bia)  # quebra o selo do lote: audita e trava lances
+    audit(disputed)
+    bid(new_bidder("c@example.com"), disputed, "500.00")
+
+    messages = [r.getMessage() for r in caplog.records if r.name == "verz.security"]
+    assert f"auditoria_falhou lote={disputed.pk} problemas=1" in messages
+    assert any(m.startswith(f"lance_recusado_integridade lote={disputed.pk}") for m in messages)
+
+
 def test_changed_bidder_is_detected(disputed, bia):
     raw_sql("UPDATE auctions_bid SET bidder_id = %s WHERE lot_id = %s AND sequence = 1", [bia.pk, disputed.pk])
 

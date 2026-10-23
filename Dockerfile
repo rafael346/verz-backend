@@ -12,6 +12,6 @@ USER app
 
 EXPOSE 8000
 # ASGI: o tempo real (SSE) mantém conexões abertas sem prender uma thread cada; as views síncronas rodam em threads.
-# Um só processo: os limites de tentativa usam cache em memória. --no-proxy-headers: o IP do cliente é decidido
+# Cache e limites de tentativa ficam no Postgres (D27). --no-proxy-headers: o IP do cliente é decidido
 # pelo NUM_PROXIES do DRF, não pelo uvicorn.
 CMD ["uvicorn", "config.asgi:application", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-server-header"]
