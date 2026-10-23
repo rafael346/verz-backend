@@ -150,7 +150,8 @@ def search(query, offset=0):
     if not isinstance(data, dict) or "total" not in data:
         # Endpoint movido (404) ou formato novo: é falha do museu, não "nenhum resultado".
         raise MetUnavailable("resposta inesperada da busca")
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    # 3 em paralelo: rajadas maiores fazem o Imperva do Met bloquear o IP (D23).
+    with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(_get_object_or_failed, data.get("objectIDs") or []))
     total = data["total"] or 0
     page = {
