@@ -9,6 +9,7 @@ from django.utils.crypto import salted_hmac
 
 from wallet.models import Wallet
 
+from . import integrity
 from .models import Bid, Lot, Phase, Status
 
 ANTI_SNIPING_WINDOW = timedelta(minutes=2)
@@ -41,6 +42,10 @@ def place_bid(lot_id, user, amount):
     wallet = Wallet.objects.select_for_update().get(user=user)
     now = timezone.now()
 
+    head = integrity.head_of(lot)
+    if not integrity.seal_matches(lot, head):
+        # Nunca construir em cima de adulteração: o próximo selo a esconderia.
+        raise BidRejected("integrity_error", "Lote bloqueado para lances: a auditoria encontrou uma falha de integridade.")
     phase = lot.phase(now)
     if phase == Phase.SCHEDULED:
         raise BidRejected("not_started", "O lote ainda não começou.")
@@ -57,10 +62,13 @@ def place_bid(lot_id, user, amount):
                           f"Saldo disponível insuficiente: você tem {available:.2f} disponível.")
 
     lot.bid_count += 1
-    bid = Bid.objects.create(lot=lot, bidder=user, bidder_alias=bidder_alias(lot.pk, user.pk),
-                             sequence=lot.bid_count, amount=amount)
+    bid = Bid(lot=lot, bidder=user, bidder_alias=bidder_alias(lot.pk, user.pk), sequence=lot.bid_count,
+              amount=amount, created_at=now, prev_hash=head)
+    bid.hash = integrity.bid_hash(bid, head)
+    bid.save()
     lot.current_bid, lot.leader = amount, user
     if lot.ends_at - now <= ANTI_SNIPING_WINDOW:
         lot.ends_at += ANTI_SNIPING_EXTENSION
-    lot.save(update_fields=["current_bid", "leader", "bid_count", "ends_at"])
+    integrity.reseal(lot, bid.hash)
+    lot.save(update_fields=["current_bid", "leader", "bid_count", "ends_at", "seal"])
     return bid, lot

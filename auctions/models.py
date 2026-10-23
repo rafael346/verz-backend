@@ -59,6 +59,8 @@ class Lot(models.Model):
     leader = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
                                related_name="leading_lots")
     bid_count = models.PositiveIntegerField(default=0)
+    # HMAC do estado do lote (integrity.lot_seal); qualquer mudança fora de place_bid/cancelamento o quebra.
+    seal = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = LotQuerySet.as_manager()
@@ -88,7 +90,10 @@ class Bid(models.Model):
     bidder_alias = models.CharField(max_length=20)
     sequence = models.PositiveIntegerField()
     amount = models.DecimalField(max_digits=12, decimal_places=2)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)  # definido antes de gravar: entra no hash
+    # Cadeia HMAC do histórico (D06): hash = HMAC(chave fora do banco, dados do lance + prev_hash).
+    prev_hash = models.CharField(max_length=64)
+    hash = models.CharField(max_length=64)
 
     class Meta:
         constraints = [

@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Max
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -15,10 +16,10 @@ from accounts.permissions import IsBidder, IsSeller
 from catalog import met
 from catalog.views import UNAVAILABLE
 
-from . import bidding
+from . import bidding, integrity
 from .models import Bid, Lot, Phase, Status
-from .serializers import (BidCreateSerializer, BidSerializer, LotCreateSerializer, LotSerializer,
-                          ParticipationSerializer, SellerLotSerializer, ShowcaseParams)
+from .serializers import (AuditBidSerializer, BidCreateSerializer, BidSerializer, LotCreateSerializer,
+                          LotSerializer, ParticipationSerializer, SellerLotSerializer, ShowcaseParams)
 
 SNAPSHOT_FIELDS = ["title", "artist", "date", "medium", "dimensions", "culture", "department", "source_url"]
 TERMS_FIELDS = ["starting_bid", "min_increment", "starts_at", "ends_at"]
@@ -64,11 +65,14 @@ class LotListCreateView(APIView):
             image, image_type = met.fetch_image(item["image_url"])
         except met.MetUnavailable:
             return Response({"detail": UNAVAILABLE}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        lot = Lot.objects.create(
-            seller=request.user, external_id=item["external_id"], image=image, image_type=image_type,
-            **{field: item[field] for field in SNAPSHOT_FIELDS},
-            **{field: data[field] for field in TERMS_FIELDS},
-        )
+        with transaction.atomic():  # o lote nunca existe sem selo
+            lot = Lot.objects.create(
+                seller=request.user, external_id=item["external_id"], image=image, image_type=image_type,
+                **{field: item[field] for field in SNAPSHOT_FIELDS},
+                **{field: data[field] for field in TERMS_FIELDS},
+            )
+            integrity.reseal(lot, integrity.genesis(lot.pk))
+            lot.save(update_fields=["seal"])
         return Response(SellerLotSerializer(lot).data, status=status.HTTP_201_CREATED)
 
 
@@ -105,6 +109,9 @@ class LotCancelView(APIView):
 
     def post(self, request, pk):
         lot = get_object_or_404(Lot.objects.select_for_update().defer("image"), pk=pk, seller=request.user)
+        if not integrity.seal_matches(lot):
+            return Response({"detail": "Lote bloqueado: a auditoria encontrou uma falha de integridade."},
+                            status=status.HTTP_409_CONFLICT)
         if lot.status == Status.CANCELLED:
             return Response({"detail": "Este lote já foi cancelado."}, status=status.HTTP_400_BAD_REQUEST)
         if lot.bid_count:
@@ -114,8 +121,26 @@ class LotCancelView(APIView):
             return Response({"detail": "Lote encerrado não pode ser cancelado."},
                             status=status.HTTP_400_BAD_REQUEST)
         lot.status = Status.CANCELLED
-        lot.save(update_fields=["status"])
+        integrity.reseal(lot)
+        lot.save(update_fields=["status", "seal"])
         return Response(SellerLotSerializer(lot).data)
+
+
+class LotAuditView(APIView):
+    """Auditoria pública: recalcula a cadeia e o selo e diz se o histórico está íntegro."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk):
+        lot = get_object_or_404(Lot.objects.defer("image"), pk=pk)
+        problems, rows, head = integrity.verify(lot)
+        return Response({
+            "lot": {**LotSerializer(lot).data, "status": lot.status},
+            "intact": not problems,
+            "problems": problems,
+            "head_hash": head,
+            "bids": [{**AuditBidSerializer(bid).data, "valid": valid} for bid, valid in rows],
+        })
 
 
 class SellerLotsView(APIView):

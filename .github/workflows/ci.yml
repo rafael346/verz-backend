@@ -17,6 +17,7 @@ jobs:
     env:
       DEBUG: "True"
       SECRET_KEY: ci-only-key
+      AUDIT_HMAC_KEY: ci-only-audit-key-0123456789abcdef
       DATABASE_URL: postgres://verz:verz@localhost:5432/verz
     steps:
       - uses: actions/checkout@v4

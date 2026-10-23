@@ -12,4 +12,5 @@ urlpatterns = [
     path("<int:pk>/bids/", views.BidListCreateView.as_view()),
     path("<int:pk>/image/", views.lot_image),
     path("<int:pk>/cancel/", views.LotCancelView.as_view()),
+    path("<int:pk>/audit/", views.LotAuditView.as_view()),
 ]

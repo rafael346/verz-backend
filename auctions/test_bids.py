@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 from accounts.models import Role
 from wallet.models import EntryKind, LedgerEntry
 
+from . import integrity
 from .models import Bid, Lot, Status
 from .tests import client_for, ended, live, make_lot, make_user, scheduled, seller  # noqa: F401 (fixture)
 
@@ -34,6 +35,14 @@ def ana():
 @pytest.fixture
 def bia():
     return new_bidder("bia@example.com")
+
+
+def move_end(lot, when):
+    """Simula o relógio andando (não um atacante): muda o fim e re-sela o lote."""
+    lot.refresh_from_db()
+    lot.ends_at = when
+    integrity.reseal(lot)
+    lot.save(update_fields=["ends_at", "seal"])
 
 
 def bid(user, lot, amount):
@@ -165,7 +174,7 @@ def test_every_late_bid_extends_again(seller, ana, bia):
     lot = make_lot(seller, timedelta(minutes=-10), lasts=timedelta(minutes=11))
     bid(ana, lot, "100.00")  # fim passa para ~3 min à frente
     almost_over = timezone.now() + timedelta(seconds=30)
-    Lot.objects.filter(pk=lot.pk).update(ends_at=almost_over)  # o tempo passou: faltam 30 s de novo
+    move_end(lot, almost_over)  # o tempo passou: faltam 30 s de novo
 
     bid(bia, lot, "110.00")
 

@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 from accounts.models import Role, User
 from catalog import met
 
+from . import integrity
 from .models import Lot, Status
 
 pytestmark = pytest.mark.django_db
@@ -76,7 +77,10 @@ def make_lot(seller, starts_in, lasts=timedelta(hours=1), **fields):
     start = timezone.now() + starts_in
     values = {"external_id": 1, "title": "Obra", "image": JPEG, "image_type": "image/jpeg",
               "starting_bid": Decimal("100.00"), "min_increment": Decimal("10.00"), **fields}
-    return Lot.objects.create(seller=seller, starts_at=start, ends_at=start + lasts, **values)
+    lot = Lot.objects.create(seller=seller, starts_at=start, ends_at=start + lasts, **values)
+    integrity.reseal(lot)  # como a view de criação faz
+    lot.save(update_fields=["seal"])
+    return lot
 
 
 def live(seller, **fields):

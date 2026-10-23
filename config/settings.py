@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -9,6 +10,10 @@ environ.Env.read_env(BASE_DIR / ".env")
 
 DEBUG = env("DEBUG")
 SECRET_KEY = env("SECRET_KEY")
+# Chave do HMAC do histórico de lances (D06). Fica fora do banco: quem altera o banco não recalcula a cadeia.
+AUDIT_HMAC_KEY = env("AUDIT_HMAC_KEY")
+if len(AUDIT_HMAC_KEY) < 32:
+    raise ImproperlyConfigured("AUDIT_HMAC_KEY precisa ter pelo menos 32 caracteres.")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 

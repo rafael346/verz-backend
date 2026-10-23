@@ -95,7 +95,7 @@ class BidSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Bid
-        fields = ["sequence", "bidder_alias", "amount", "created_at", "is_you"]
+        fields = ["sequence", "bidder_alias", "amount", "created_at", "hash", "is_you"]
 
     def get_is_you(self, bid):
         request = self.context.get("request")
@@ -113,3 +113,9 @@ class ParticipationSerializer(LotSerializer):
         if lot.phase() == Phase.ENDED:
             return "won" if leading else "lost"
         return "winning" if leading else "outbid"
+
+
+class AuditBidSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bid
+        fields = ["sequence", "bidder_alias", "amount", "created_at", "prev_hash", "hash"]
