@@ -1,5 +1,7 @@
 import io
+import threading
 from http.client import IncompleteRead
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -196,7 +198,7 @@ def test_get_json_retries_temporary_failures(monkeypatch, no_sleep, error, durin
             raise error
         return io.BytesIO(b'{"ok": true}')
 
-    monkeypatch.setattr(met, "urlopen", fake_urlopen)
+    monkeypatch.setattr(met, "_open", fake_urlopen)
 
     assert met._get_json("https://example.org") == {"ok": True}
     assert attempts == [met.TIMEOUT] * (met.RETRIES + 1)
@@ -209,7 +211,7 @@ def test_get_json_gives_up_after_the_retries(monkeypatch, no_sleep):
         attempts.append(1)
         raise URLError("sem rede")
 
-    monkeypatch.setattr(met, "urlopen", fake_urlopen)
+    monkeypatch.setattr(met, "_open", fake_urlopen)
 
     with pytest.raises(met.MetUnavailable):
         met._get_json("https://example.org")
@@ -224,7 +226,7 @@ def test_get_json_does_not_retry_client_errors(monkeypatch, no_sleep, code, expe
         attempts.append(1)
         raise HTTPError("u", code, "erro", None, None)
 
-    monkeypatch.setattr(met, "urlopen", fake_urlopen)
+    monkeypatch.setattr(met, "_open", fake_urlopen)
 
     if expected is None:
         assert met._get_json("https://example.org") is None
@@ -232,3 +234,83 @@ def test_get_json_does_not_retry_client_errors(monkeypatch, no_sleep, code, expe
         with pytest.raises(expected):
             met._get_json("https://example.org")
     assert len(attempts) == 1
+
+
+@pytest.mark.parametrize("body, content_type", [
+    (b"\xff\xd8\xff\xe0resto", "image/jpeg"), (b"\x89PNG\r\n\x1a\nresto", "image/png"),
+])
+def test_fetch_image_returns_bytes_and_type(monkeypatch, body, content_type):
+    monkeypatch.setattr(met, "_open", lambda request, timeout: io.BytesIO(body))
+
+    assert met.fetch_image("https://images.metmuseum.org/a.jpg") == (body, content_type)
+
+
+@pytest.mark.parametrize("url", [
+    "http://images.metmuseum.org/a.jpg", "https://evil.example/a.jpg",
+    "https://images.metmuseum.org@evil.example/a.jpg", "file:///etc/passwd", "",
+])
+def test_fetch_image_refuses_other_hosts_without_any_request(monkeypatch, url):
+    calls = []
+    monkeypatch.setattr(met, "_open", lambda request, timeout: calls.append(request))
+
+    with pytest.raises(met.MetUnavailable):
+        met.fetch_image(url)
+    assert calls == []
+
+
+def test_fetch_image_rejects_files_that_are_not_images(monkeypatch):
+    monkeypatch.setattr(met, "_open", lambda request, timeout: io.BytesIO(b"<html>nope</html>"))
+
+    with pytest.raises(met.MetUnavailable):
+        met.fetch_image("https://images.metmuseum.org/a.jpg")
+
+
+def test_fetch_image_rejects_files_over_the_limit(monkeypatch):
+    monkeypatch.setattr(met, "MAX_IMAGE_BYTES", 10)
+    monkeypatch.setattr(met, "_open", lambda request, timeout: io.BytesIO(b"\xff\xd8\xff" + b"0" * 20))
+
+    with pytest.raises(met.MetUnavailable):
+        met.fetch_image("https://images.metmuseum.org/a.jpg")
+
+
+def test_fetch_image_of_missing_file_is_unavailable(monkeypatch, no_sleep):
+    def not_found(request, timeout):
+        raise HTTPError("u", 404, "Not Found", None, None)
+
+    monkeypatch.setattr(met, "_open", not_found)
+
+    with pytest.raises(met.MetUnavailable):
+        met.fetch_image("https://images.metmuseum.org/a.jpg")
+
+
+def test_redirects_are_refused_and_never_followed(no_sleep):
+    hits = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.path)
+            self.send_response(302)
+            self.send_header("Location", "/interno")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with pytest.raises(met.MetUnavailable):
+            met._fetch(f"http://127.0.0.1:{server.server_port}/inicio")
+    finally:
+        server.shutdown()
+    assert hits == ["/inicio"]
+
+
+@pytest.mark.parametrize("url", [
+    "javascript:alert(1)", "https://evil.example/x", "http://www.metmuseum.org/x",
+    "https://www.metmuseum.org.evil.example/x", None, 42,
+])
+def test_untrusted_museum_links_are_dropped(fake_met, url):
+    fake_met["objects"][1] = {**obj(1), "objectURL": url}
+
+    assert search(client_with(Role.SELLER)).json()["items"][0]["source_url"] == ""

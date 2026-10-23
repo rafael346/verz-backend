@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "accounts",
     "wallet",
     "catalog",
+    "auctions",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -120,5 +121,6 @@ REST_FRAMEWORK = {
         "login_email": "10/hour",
         "register": "10/hour",
         "catalog": "30/min",  # cada busca vira até 13 chamadas ao museu
+        "lot_create": "60/hour",  # cada criação baixa a imagem da obra
     },
 }
