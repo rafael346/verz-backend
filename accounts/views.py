@@ -57,5 +57,10 @@ class LogoutView(APIView):
 
 
 class MeView(APIView):
+    # Visitante sem login não é erro: 204, sem usuário (evita um 403 no console de toda página).
+    permission_classes = [AllowAny]
+
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(UserSerializer(request.user).data)

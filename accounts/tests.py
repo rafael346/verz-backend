@@ -59,7 +59,7 @@ def test_login_success_and_logout(api):
     assert api.get("/api/auth/me/").status_code == 200
 
     assert api.post("/api/auth/logout/").status_code == 204
-    assert api.get("/api/auth/me/").status_code in (401, 403)
+    assert api.get("/api/auth/me/").status_code == 204
 
 
 def test_login_failure_does_not_reveal_whether_email_exists(api):
@@ -145,8 +145,11 @@ def test_login_email_limit_accepts_huge_email_without_error(api):
     assert api.post("/api/auth/login/", {"email": huge, "password": "x"}, format="json").status_code == 400
 
 
-def test_me_requires_authentication(api):
-    assert api.get("/api/auth/me/").status_code in (401, 403)
+def test_me_has_no_user_for_visitors(api):
+    response = api.get("/api/auth/me/")
+
+    assert response.status_code == 204
+    assert response.content == b""
 
 
 def test_csrf_is_enforced_even_for_anonymous_posts():

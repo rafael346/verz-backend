@@ -23,8 +23,7 @@ services:
     command: >
       sh -c "python manage.py migrate &&
       exec uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --no-proxy-headers --no-server-header"
-    ports:
-      - "8000:8000"
+    # Sem porta pública: o acesso é só pelo nginx, que define o IP real do cliente (NUM_PROXIES=1).
 
   # Encerra e liquida lotes vencidos (D05) e limpa sessões expiradas a cada 24 h.
   worker:
@@ -36,6 +35,31 @@ services:
       backend:
         condition: service_started  # o backend aplica as migrações; até lá o loop só registra a falha e tenta de novo
     command: python manage.py run_settlement
+    restart: unless-stopped
+
+  frontend:
+    build: ../verz-frontend
+    environment:
+      # Páginas renderizadas no servidor leem a API direto pela rede interna (sem passar pelo nginx).
+      BACKEND_URL: http://backend:8000
+    restart: unless-stopped
+
+  # Porta de entrada única: http://localhost:8080. Para desenvolver o front com recarga, rode `npm run dev`
+  # no host e suba sem o serviço frontend: FRONTEND_UPSTREAM=host.docker.internal:3000 docker compose up db backend worker nginx
+  nginx:
+    image: nginx:1.29.8-alpine
+    ports:
+      - "8080:80"
+    environment:
+      FRONTEND_UPSTREAM: ${FRONTEND_UPSTREAM:-frontend:3000}
+    volumes:
+      - ./deploy/nginx:/etc/nginx/templates:ro
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_started
+        required: false
     restart: unless-stopped
 
 volumes:
