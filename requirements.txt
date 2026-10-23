@@ -4,6 +4,4 @@ django-environ==0.14.0
 djangorestframework==3.18.3
 gunicorn==26.2.0
 psycopg==3.3.6
-pytest==9.1.1
-pytest-django==4.14.0
 psycopg-binary==3.3.6

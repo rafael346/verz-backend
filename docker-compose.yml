@@ -20,7 +20,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000"
+    # clearsessions apaga sessões expiradas (o Django não faz isso sozinho); roda a cada 24 h.
+    # shortcut: o loop não é supervisionado (o Docker só vigia o gunicorn); mover para o worker na tarefa 7.
+    command: >
+      sh -c "python manage.py migrate || exit 1;
+      (while true; do python manage.py clearsessions; sleep 86400; done) &
+      exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --no-control-socket"
     ports:
       - "8000:8000"
 

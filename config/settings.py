@@ -19,7 +19,10 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "rest_framework",
     "core",
+    "accounts",
 ]
+
+AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -95,7 +98,7 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
+        "accounts.authentication.CsrfSessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
@@ -103,5 +106,16 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
-    "DEFAULT_THROTTLE_RATES": {"anon": "60/min", "user": "240/min"},
+    # Proxies confiáveis à frente do Django. 0 = usa o IP do socket (seguro quando o backend
+    # é acessível direto). Atrás do proxy do Next.js, defina NUM_PROXIES=1 e não publique o
+    # backend para fora; com 1 e sem proxy, X-Forwarded-For forjado burla os limites.
+    "NUM_PROXIES": env.int("NUM_PROXIES", default=0),
+    # shortcut: contadores no cache local (por processo); com vários workers use Redis/DB cache.
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/min",
+        "user": "240/min",
+        "login": "5/min",
+        "login_email": "10/hour",
+        "register": "10/hour",
+    },
 }
