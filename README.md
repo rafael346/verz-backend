@@ -36,6 +36,12 @@ verz/
 
 3. Abra **http://localhost:8080**. O nginx é a única porta de entrada: `/api/` vai para o Django, o resto para o Next.
 
+4. Carregue os dados de demonstração (contas e lotes em todas as fases; ver abaixo):
+
+   ```bash
+   docker compose exec backend python manage.py seed_demo
+   ```
+
 Serviços: `db` (Postgres, só em `127.0.0.1:5432`), `backend` (API e tempo real; aplica as migrações e cria a tabela
 de cache ao subir), `worker` (encerra e liquida lotes vencidos, emite comprovantes e limpa sessões expiradas),
 `frontend` e `nginx`.
@@ -46,6 +52,37 @@ do front:
 ```bash
 FRONTEND_UPSTREAM=host.docker.internal:3000 docker compose up db backend worker nginx
 ```
+
+## Dados de demonstração
+
+```bash
+docker compose exec backend python manage.py seed_demo   # sem Docker: python manage.py seed_demo
+```
+
+O comando cria (ou reaproveita) três contas e um conjunto de lotes com obras reais do Met, e imprime os endereços
+de cada lote. **Senha de todas as contas: `leilao-demo-2026`.**
+
+| Conta | Papel | Para ver |
+|---|---|---|
+| `demo.leiloeiro@example.com` | leiloeiro | o painel: total recebido, criação de lotes, resultado de cada lote |
+| `demo.ana@example.com` | licitante | a sala, a carteira com saldo comprometido e o comprovante do arremate |
+| `demo.bia@example.com` | licitante | a outra ponta da disputa (abra numa janela anônima e dispute com a Ana) |
+
+| Lote | O que mostra |
+|---|---|
+| Ao vivo, termina em 3 dias, 3 lances | disputa: "ganhando/superado", posição, histórico e saldo comprometido |
+| Ao vivo, termina em 10 minutos | contagem em destaque; um lance nos últimos 2 minutos prorroga o fim |
+| Agendado, abre em 2 horas | vitrine "agendados" e a sala antes de abrir |
+| Encerrado e arrematado pela Ana | liquidação, Meus arremates, comprovante público e auditoria íntegra |
+| Encerrado sem lances | lote que fecha sem vencedor |
+
+- **Só para ambiente local:** a senha está neste README, então essas contas não podem existir num servidor público.
+- **Rodar de novo** cria um conjunto novo de lotes, com horários a partir de agora. Os antigos ficam e vão encerrando
+  sozinhos (lances são imutáveis, não há como apagá-los). As senhas voltam para a de demonstração, e as licitantes
+  recebem R$ 10.000 sempre que tiverem menos de R$ 5.000 disponíveis.
+- **O Met precisa estar no ar:** o comando busca as 4 obras (dados e imagem) uma de cada vez, antes de gravar
+  qualquer coisa. Se o museu falhar, nada é criado e aparece "Acervo do Met indisponível agora; tente de novo em
+  alguns minutos". As obras ficam no cache por 24 h, então rodar de novo logo depois quase não chama o museu.
 
 ## Como rodar sem Docker (só a API)
 
@@ -60,12 +97,16 @@ python manage.py migrate
 python manage.py createcachetable
 uvicorn config.asgi:application --port 8000
 python manage.py run_settlement   # em outro terminal: a liquidação dos lotes
+python manage.py seed_demo        # opcional: dados de demonstração
 ```
+
+No `.env`, use `127.0.0.1` (não `localhost`) no `DATABASE_URL`: o Compose publica o Postgres só no IPv4 do loopback,
+e `localhost` tenta o IPv6 antes, o que deixa cada conexão esperando 30 s.
 
 ## Testes
 
 ```bash
-pytest           # 198 testes; usa o Postgres do DATABASE_URL (cria e apaga um banco de teste)
+pytest           # 203 testes; usa o Postgres do DATABASE_URL (cria e apaga um banco de teste)
 ```
 
 Os testes cobrem as regras de lance (incremento, saldo comprometido, anti-sniping, corrida entre lances), a carteira

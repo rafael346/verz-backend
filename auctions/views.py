@@ -1,7 +1,6 @@
 import logging
 from decimal import Decimal
 
-from django.db import transaction
 from django.db.models import Max, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -21,13 +20,13 @@ from catalog.views import UNAVAILABLE
 from wallet.models import EntryKind, LedgerEntry
 
 from . import bidding, events, integrity
+from .lots import create_lot
 from .models import Bid, Lot, Phase, Receipt, Status
 from .serializers import (AuditBidSerializer, BidCreateSerializer, BidSerializer, LotCreateSerializer,
                           LotSerializer, ParticipationSerializer, SellerLotSerializer, ShowcaseParams)
 
 security = logging.getLogger("verz.security")
 
-SNAPSHOT_FIELDS = ["title", "artist", "date", "medium", "dimensions", "culture", "department", "source_url"]
 TERMS_FIELDS = ["starting_bid", "min_increment", "starts_at", "ends_at"]
 NOT_LISTABLE = "Obra não encontrada ou indisponível para leilão: precisa ser de domínio público e ter imagem."
 
@@ -71,14 +70,7 @@ class LotListCreateView(APIView):
             image, image_type = met.fetch_image(item["image_url"])
         except met.MetUnavailable:
             return Response({"detail": UNAVAILABLE}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        with transaction.atomic():  # o lote nunca existe sem selo
-            lot = Lot.objects.create(
-                seller=request.user, external_id=item["external_id"], image=image, image_type=image_type,
-                **{field: item[field] for field in SNAPSHOT_FIELDS},
-                **{field: data[field] for field in TERMS_FIELDS},
-            )
-            integrity.reseal(lot, integrity.genesis(lot.pk))
-            lot.save(update_fields=["seal"])
+        lot = create_lot(request.user, item, image, image_type, **{field: data[field] for field in TERMS_FIELDS})
         return Response(SellerLotSerializer(lot).data, status=status.HTTP_201_CREATED)
 
 
