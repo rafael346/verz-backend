@@ -84,6 +84,12 @@ de cada lote. **Senha de todas as contas: `leilao-demo-2026`.**
   qualquer coisa. Se o museu falhar, nada é criado e aparece "Acervo do Met indisponível agora; tente de novo em
   alguns minutos". As obras ficam no cache por 24 h, então rodar de novo logo depois quase não chama o museu.
 
+## Dados dos testes ponta a ponta
+
+`python manage.py e2e_fixtures` cria contas novas (senha aleatória) e lotes sob medida, sem o Met, e imprime JSON. É
+usado pela suíte do `verz-frontend` (`npm run e2e`), que o chama sozinha; não precisa rodar à mão. Cada execução deixa
+os seus lotes no banco de desenvolvimento, como o `seed_demo`.
+
 ## Como rodar sem Docker (só a API)
 
 Precisa de Python 3.13 e de um Postgres (o do Compose serve: `docker compose up db`).
@@ -106,7 +112,7 @@ e `localhost` tenta o IPv6 antes, o que deixa cada conexão esperando 30 s.
 ## Testes
 
 ```bash
-pytest           # 223 testes; usa o Postgres do DATABASE_URL (cria e apaga um banco de teste)
+pytest           # 230 testes; usa o Postgres do DATABASE_URL (cria e apaga um banco de teste)
 ```
 
 Os testes cobrem as regras de lance (incremento, saldo comprometido, anti-sniping, corrida entre lances), a carteira
@@ -145,6 +151,52 @@ para os licitantes, no comprovante e na auditoria.
 **Histórico à prova de adulteração:** cada lance é selado com HMAC-SHA256 encadeado ao anterior, e o estado do lote
 tem um selo próprio. A chave fica fora do banco, triggers impedem alterar ou apagar lances e comprovantes, e a
 auditoria pública recalcula tudo a cada visita. Lote com selo quebrado não recebe lances nem é liquidado.
+
+## Publicar com HTTPS (TLS)
+
+Localmente o verz roda em `http://localhost:8080`, sem TLS: o tráfego nem sai da máquina. Publicado na internet sem
+HTTPS, o cookie de sessão viajaria aberto e quem o capturasse entraria na conta da pessoa. O backend já está pronto
+para HTTPS: fora do `DEBUG`, os cookies de sessão e de CSRF só viajam por HTTPS (`Secure`), o HSTS é enviado (a API
+pelo Django, as páginas pelo Next) e o redirecionamento de `http` para `https` existe, desligado só no ambiente local.
+
+**Recomendado: terminar o TLS no próprio nginx**, que já é a porta de entrada única.
+
+1. Obtenha um certificado para o domínio (o [Let's Encrypt](https://letsencrypt.org/) é gratuito; o `certbot` gera
+   `fullchain.pem` e `privkey.pem`) e monte a pasta dele no serviço `nginx` do Compose, somente leitura.
+2. Em `deploy/nginx/default.conf.template`, o bloco atual vira o de HTTPS e um bloco novo redireciona o HTTP:
+
+   ```nginx
+   server {
+       listen 80;
+       return 301 https://$host$request_uri;
+   }
+
+   server {
+       listen 443 ssl;
+       http2 on;
+       ssl_certificate     /etc/nginx/certs/fullchain.pem;
+       ssl_certificate_key /etc/nginx/certs/privkey.pem;
+       ssl_protocols TLSv1.2 TLSv1.3;
+       # ... o resto como está hoje (server_tokens, client_max_body_size, location /api/ e location /)
+   }
+   ```
+
+   e publique a porta `443:443` no Compose.
+3. No `.env.docker`: `SECURE_SSL_REDIRECT=True`, o domínio em `ALLOWED_HOSTS` (mantendo `backend`) e
+   `CSRF_TRUSTED_ORIGINS=https://seu-dominio`. Depois, `python manage.py check --deploy` não deve acusar W008.
+
+**Armadilha: TLS terminado antes do nginx.** Se outro proxy ou balanceador fizer o HTTPS e falar com o nginx por HTTP,
+o nginx manda `X-Forwarded-Proto: http` (ele usa o `$scheme` da conexão que recebeu). O Django acha que a requisição
+veio sem TLS e, com `SECURE_SSL_REDIRECT=True`, redireciona para HTTPS em loop. Nesse arranjo, três mudanças andam
+juntas:
+
+- o nginx repassa o esquema que recebeu do proxy: `proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;`;
+- o nginx **acrescenta** ao `X-Forwarded-For` em vez de sobrescrever (`$proxy_add_x_forwarded_for`): hoje ele grava
+  `$remote_addr`, que nesse arranjo seria o IP do proxy, e todos os visitantes dividiriam um só limite de tentativas;
+- `NUM_PROXIES=2`, para o Django pegar o IP do visitante (o que o proxy de fora escreveu) e ignorar o que o próprio
+  visitante tentar forjar.
+
+Isso só é seguro se o proxy de fora também sobrescrever o `X-Forwarded-For` com o IP de quem se conectou a ele.
 
 ## Segurança (OWASP)
 

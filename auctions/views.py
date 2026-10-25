@@ -1,4 +1,5 @@
 import logging
+import math
 from decimal import Decimal
 
 from django.db.models import Max, Sum
@@ -29,6 +30,7 @@ from .serializers import (AuditBidSerializer, BidCreateSerializer, BidSerializer
 
 security = logging.getLogger("verz.security")
 
+AUDIT_PAGE_SIZE = 50
 TERMS_FIELDS = ["starting_bid", "min_increment", "starts_at", "ends_at"]
 NOT_LISTABLE = "Obra não encontrada ou indisponível para leilão: precisa ser de domínio público e ter imagem."
 
@@ -128,16 +130,28 @@ class LotAuditView(APIView):
 
     def get(self, request, pk):
         lot = get_object_or_404(Lot.objects.defer("image"), pk=pk)
+        page = request.query_params.get("page", "1")
+        if not page.isdigit() or int(page) < 1:
+            raise Http404
+        # A cadeia é verificada inteira (é o que garante o veredito); só a lista de lances vem em páginas.
         problems, rows, head = integrity.verify(lot)
+        pages = max(1, math.ceil(len(rows) / AUDIT_PAGE_SIZE))
+        page = int(page)
+        if page > pages:
+            raise Http404
         if problems:
             security.error("auditoria_falhou lote=%s problemas=%d", lot.pk, len(problems))
+        shown = rows[(page - 1) * AUDIT_PAGE_SIZE:page * AUDIT_PAGE_SIZE]
         return Response({
             "lot": {**LotSerializer(lot).data, "status": lot.status},
             "intact": not problems,
             "problems": problems,
             "head_hash": head,
             "cancellation": cancellation_payload(lot),
-            "bids": [{**AuditBidSerializer(bid).data, "valid": valid} for bid, valid in rows],
+            "bid_count": len(rows),
+            "page": page,
+            "pages": pages,
+            "bids": [{**AuditBidSerializer(bid).data, "valid": valid} for bid, valid in shown],
         })
 
 

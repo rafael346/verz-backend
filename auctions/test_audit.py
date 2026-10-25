@@ -184,3 +184,48 @@ def test_forged_non_ascii_hash_is_reported_not_crashing(disputed):
     assert response.status_code == 200
     assert response.json()["intact"] is False
     assert bid(new_bidder("c@example.com"), disputed, "500.00").json()["code"] == "integrity_error"
+
+
+# --- paginação: a cadeia é verificada inteira, a lista vem em páginas -----------------------
+
+@pytest.fixture
+def long_lot(seller, ana, bia):
+    """60 lances alternados (100, 110, …, 690)."""
+    from .bidding import place_bid
+
+    lot = live(seller)
+    for n in range(60):
+        place_bid(lot.pk, (ana, bia)[n % 2], Decimal("100.00") + 10 * n)
+    return lot
+
+
+def audit_page(lot, page):
+    return APIClient().get(f"/api/lots/{lot.pk}/audit/", {"page": page})
+
+
+def test_audit_lists_bids_in_pages_of_50(long_lot):
+    first, second = audit_page(long_lot, 1).json(), audit_page(long_lot, 2).json()
+
+    assert (first["bid_count"], first["page"], first["pages"]) == (60, 1, 2)
+    assert [b["sequence"] for b in first["bids"]] == list(range(1, 51))
+    assert [b["sequence"] for b in second["bids"]] == list(range(51, 61))
+    assert audit(long_lot)["page"] == 1  # sem ?page: a primeira
+
+
+def test_verdict_covers_the_whole_chain_on_every_page(long_lot):
+    raw_sql("UPDATE auctions_bid SET amount = 1 WHERE lot_id = %s AND sequence = 55", [long_lot.pk])
+
+    first = audit_page(long_lot, 1).json()
+
+    assert first["intact"] is False and any("#55" in p for p in first["problems"])
+    assert all(b["valid"] for b in first["bids"])  # o lance alterado está na página 2
+
+
+def test_audit_page_out_of_range_or_invalid_is_404(long_lot):
+    assert audit_page(long_lot, 3).status_code == 404
+    assert audit_page(long_lot, "x").status_code == 404
+
+
+def test_lot_without_bids_has_one_empty_page(seller):
+    report = audit(live(seller))
+    assert (report["bid_count"], report["page"], report["pages"], report["bids"]) == (0, 1, 1, [])

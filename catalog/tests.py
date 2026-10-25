@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.error import HTTPError, URLError
 
 import pytest
+from django.db import connection
 from rest_framework.test import APIClient
 
 from accounts.models import Role, User
@@ -314,3 +315,19 @@ def test_untrusted_museum_links_are_dropped(fake_met, url):
     fake_met["objects"][1] = {**obj(1), "objectURL": url}
 
     assert search(client_with(Role.SELLER)).json()["items"][0]["source_url"] == ""
+
+
+@pytest.mark.django_db(transaction=True)  # sem a transação que o pytest põe em volta de cada teste
+def test_search_runs_outside_the_request_transaction(fake_met, monkeypatch):
+    seen = []
+    real = met.search
+
+    def spy(*args, **kwargs):
+        seen.append(connection.in_atomic_block)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(met, "search", spy)
+    search(client_with(Role.SELLER))
+
+    # Fora da transação: cada gravação no cache se confirma na hora, sem segurar trava enquanto espera o museu.
+    assert seen == [False]

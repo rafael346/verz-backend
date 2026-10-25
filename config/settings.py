@@ -71,8 +71,8 @@ DATABASES["default"]["ATOMIC_REQUESTS"] = True
 
 # Cache no próprio Postgres (D27): sobrevive a reinícios (a busca no Met não refaz rajadas, D23) e é o mesmo
 # para todos os processos (os limites de tentativa valem juntos). A tabela é criada por `createcachetable`.
-# shortcut: grava dentro da transação da requisição (ATOMIC_REQUESTS), então duas buscas simultâneas pelas mesmas
-# obras esperam uma a outra até a primeira terminar; com muito tráfego, conexão própria para o cache ou Redis.
+# A busca no Met roda fora da transação da requisição (catalog/urls.py), então cada gravação no cache se confirma na
+# hora e buscas simultâneas não esperam uma pela outra.
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
