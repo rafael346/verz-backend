@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
 
+from .cancellation import REFUND_WINDOW
 from .models import Bid, Lot, Phase, Status
 
 CLOCK_SKEW = timedelta(minutes=1)
@@ -76,11 +77,34 @@ class LotSerializer(serializers.ModelSerializer):
         return f"{lot.min_next_bid():.2f}"
 
 
+def cancellation_payload(lot, show_refund=True):
+    """Motivo, data e valor estornado de um lote cancelado (D29), ou None."""
+    cancellation = getattr(lot, "cancellation", None) if lot.status == Status.CANCELLED else None
+    if cancellation is None:
+        return None
+    refunded = f"{cancellation.refunded:.2f}" if show_refund and cancellation.refunded is not None else None
+    return {"reason": cancellation.reason, "refunded": refunded,
+            "cancelled_at": serializers.DateTimeField().to_representation(cancellation.cancelled_at)}
+
+
 class SellerLotSerializer(LotSerializer):
     result = serializers.SerializerMethodField()
+    cancellation = serializers.SerializerMethodField()
+    refundable_until = serializers.SerializerMethodField()
 
     class Meta(LotSerializer.Meta):
-        fields = LotSerializer.Meta.fields + ["external_id", "status", "created_at", "result"]
+        fields = LotSerializer.Meta.fields + ["external_id", "status", "created_at", "result", "cancellation",
+                                              "refundable_until"]
+
+    def get_cancellation(self, lot):
+        return cancellation_payload(lot)
+
+    def get_refundable_until(self, lot):
+        """Até quando um arremate ainda pode ser cancelado com estorno (None se não pode)."""
+        receipt = getattr(lot, "receipt", None) if lot.status == Status.SETTLED else None
+        if receipt is None or timezone.now() > receipt.issued_at + REFUND_WINDOW:
+            return None
+        return serializers.DateTimeField().to_representation(receipt.issued_at + REFUND_WINDOW)
 
     def get_result(self, lot):
         """Resultado do lote encerrado: arrematado e por quanto (None enquanto não liquidado)."""
@@ -93,6 +117,11 @@ class SellerLotSerializer(LotSerializer):
 class ShowcaseParams(serializers.Serializer):
     phase = serializers.ChoiceField(choices=Phase.choices, default=Phase.LIVE)
     q = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
+
+
+class CancelSerializer(serializers.Serializer):
+    # Limite e obrigatoriedade ficam no cancel_lot (dependem de o lote ter lances); aqui só o tipo e um teto.
+    reason = serializers.CharField(required=False, allow_blank=True, default="", max_length=1000, trim_whitespace=False)
 
 
 class BidCreateSerializer(serializers.Serializer):
@@ -114,15 +143,23 @@ class BidSerializer(serializers.ModelSerializer):
 class ParticipationSerializer(LotSerializer):
     my_status = serializers.SerializerMethodField()
     receipt_token = serializers.SerializerMethodField()
+    cancellation = serializers.SerializerMethodField()
 
     class Meta(LotSerializer.Meta):
-        fields = LotSerializer.Meta.fields + ["my_status", "receipt_token"]
+        fields = LotSerializer.Meta.fields + ["my_status", "receipt_token", "cancellation"]
+
+    def get_cancellation(self, lot):
+        receipt = getattr(lot, "receipt", None)  # o estorno só interessa a quem pagou
+        return cancellation_payload(lot, show_refund=receipt is not None
+                                    and receipt.winner_id == self.context["request"].user.pk)
 
     def get_receipt_token(self, lot):
         receipt = getattr(lot, "receipt", None)
         return receipt.token if receipt and receipt.winner_id == self.context["request"].user.pk else None
 
     def get_my_status(self, lot):
+        if lot.status == Status.CANCELLED:
+            return "cancelled"
         leading = lot.leader_id == self.context["request"].user.pk
         if lot.phase() == Phase.ENDED:
             return "won" if leading else "lost"

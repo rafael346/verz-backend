@@ -71,6 +71,9 @@ def verify(lot):
     if not _same(lot.seal, lot_seal(lot, prev)):
         problems.append("O selo do lote não confere: o estado do lote (lance atual, líder, prazos, valores ou "
                         "contagem de lances) foi alterado, ou lances foram removidos do fim.")
+    cancellation = getattr(lot, "cancellation", None)
+    if cancellation is not None and not cancellation_is_authentic(cancellation):
+        problems.append("O registro de cancelamento (motivo ou valor estornado) foi alterado depois de gravado.")
     return problems, rows, prev
 
 
@@ -81,3 +84,12 @@ def receipt_signature(receipt):
 
 def receipt_is_authentic(receipt):
     return _same(receipt.signature, receipt_signature(receipt))
+
+
+def cancellation_signature(cancellation):
+    return _mac("cancellation", cancellation.lot_id, cancellation.reason, _money(cancellation.refunded),
+                _iso(cancellation.cancelled_at))
+
+
+def cancellation_is_authentic(cancellation):
+    return _same(cancellation.signature, cancellation_signature(cancellation))

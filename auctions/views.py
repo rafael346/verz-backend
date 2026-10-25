@@ -20,10 +20,12 @@ from catalog.views import UNAVAILABLE
 from wallet.models import EntryKind, LedgerEntry
 
 from . import bidding, events, integrity
+from .cancellation import CancelRejected, cancel_lot
 from .lots import create_lot
 from .models import Bid, Lot, Phase, Receipt, Status
-from .serializers import (AuditBidSerializer, BidCreateSerializer, BidSerializer, LotCreateSerializer,
-                          LotSerializer, ParticipationSerializer, SellerLotSerializer, ShowcaseParams)
+from .serializers import (AuditBidSerializer, BidCreateSerializer, BidSerializer, CancelSerializer,
+                          LotCreateSerializer, LotSerializer, ParticipationSerializer, SellerLotSerializer,
+                          ShowcaseParams, cancellation_payload)
 
 security = logging.getLogger("verz.security")
 
@@ -108,22 +110,14 @@ class LotCancelView(APIView):
     permission_classes = [IsSeller]
 
     def post(self, request, pk):
-        lot = get_object_or_404(Lot.objects.select_for_update().defer("image"), pk=pk, seller=request.user)
-        if not integrity.seal_matches(lot):
-            return Response({"detail": "Lote bloqueado: a auditoria encontrou uma falha de integridade."},
-                            status=status.HTTP_409_CONFLICT)
-        if lot.status == Status.CANCELLED:
-            return Response({"detail": "Este lote já foi cancelado."}, status=status.HTTP_400_BAD_REQUEST)
-        if lot.bid_count:
-            return Response({"detail": "Lote com lances não pode ser cancelado."},
-                            status=status.HTTP_400_BAD_REQUEST)
-        if lot.phase() == Phase.ENDED:
-            return Response({"detail": "Lote encerrado não pode ser cancelado."},
-                            status=status.HTTP_400_BAD_REQUEST)
-        lot.status = Status.CANCELLED
-        integrity.reseal(lot)
-        lot.save(update_fields=["status", "seal"])
-        events.notify(lot.pk, "cancelled")
+        serializer = CancelSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            lot = cancel_lot(pk, request.user, serializer.validated_data["reason"])
+        except Lot.DoesNotExist:
+            raise Http404
+        except CancelRejected as rejection:
+            return Response({"detail": rejection.detail}, status=rejection.status)
         return Response(SellerLotSerializer(lot).data)
 
 
@@ -142,6 +136,7 @@ class LotAuditView(APIView):
             "intact": not problems,
             "problems": problems,
             "head_hash": head,
+            "cancellation": cancellation_payload(lot),
             "bids": [{**AuditBidSerializer(bid).data, "valid": valid} for bid, valid in rows],
         })
 
@@ -150,7 +145,7 @@ class SellerLotsView(APIView):
     permission_classes = [IsSeller]
 
     def get(self, request):
-        lots = (Lot.objects.filter(seller=request.user).select_related("receipt").defer("image")
+        lots = (Lot.objects.filter(seller=request.user).select_related("receipt", "cancellation").defer("image")
                 .order_by("-created_at", "-id"))
         return paginated(request, self, lots, SellerLotSerializer)
 
@@ -187,8 +182,9 @@ class ParticipatingLotsView(APIView):
     permission_classes = [IsBidder]
 
     def get(self, request):
+        # Cancelados também: quem deu lance precisa saber por quê, e o vencedor, que foi estornado (D29).
         lots = (Lot.objects.filter(pk__in=Bid.objects.filter(bidder=request.user).values("lot"))
-                .exclude(status=Status.CANCELLED).select_related("receipt").defer("image")
+                .select_related("receipt", "cancellation").defer("image")
                 .order_by("-ends_at", "-id"))
         return paginated(request, self, lots, ParticipationSerializer)
 
@@ -212,6 +208,7 @@ class ReceiptView(APIView):
             "authentic": integrity.receipt_is_authentic(receipt),
             "audit": {"intact": not problems, "head_matches": head == receipt.head_hash,
                       "url": f"/api/lots/{lot.pk}/audit/"},
+            "cancellation": cancellation_payload(lot),
         })
 
 
@@ -220,7 +217,9 @@ class SellerSummaryView(APIView):
 
     def get(self, request):
         lots = Lot.objects.filter(seller=request.user, status=Status.SETTLED)
-        received = (LedgerEntry.objects.filter(wallet__user=request.user, kind=EntryKind.SETTLEMENT_CREDIT)
+        # Líquido: a retirada de um arremate cancelado (REFUND_DEBIT, negativa) desconta o que tinha entrado.
+        received = (LedgerEntry.objects.filter(wallet__user=request.user,
+                                               kind__in=[EntryKind.SETTLEMENT_CREDIT, EntryKind.REFUND_DEBIT])
                     .aggregate(total=Sum("amount"))["total"] or Decimal("0.00"))
         return Response({"total_received": f"{received:.2f}",
                          "sold": lots.filter(receipt__isnull=False).count(),

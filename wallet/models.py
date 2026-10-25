@@ -18,6 +18,8 @@ class EntryKind(models.TextChoices):
     DEPOSIT = "deposit", "Depósito"
     SETTLEMENT_DEBIT = "settlement_debit", "Débito de arremate"
     SETTLEMENT_CREDIT = "settlement_credit", "Crédito de venda"
+    REFUND_CREDIT = "refund_credit", "Estorno de arremate cancelado"
+    REFUND_DEBIT = "refund_debit", "Retirada por arremate cancelado"
 
 
 class LedgerEntry(models.Model):

@@ -113,3 +113,13 @@ class Receipt(models.Model):
     head_hash = models.CharField(max_length=64)  # último hash da cadeia no encerramento (âncora externa)
     issued_at = models.DateTimeField(default=timezone.now)
     signature = models.CharField(max_length=64)
+
+
+class Cancellation(models.Model):
+    """Cancelamento de um lote: motivo e estorno, assinados (D29). Imutável por trigger."""
+
+    lot = models.OneToOneField(Lot, on_delete=models.PROTECT, related_name="cancellation")
+    reason = models.CharField(max_length=200)
+    refunded = models.DecimalField(max_digits=12, decimal_places=2, null=True)  # só se já tinha sido arrematado
+    cancelled_at = models.DateTimeField(default=timezone.now)
+    signature = models.CharField(max_length=64)

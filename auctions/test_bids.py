@@ -207,14 +207,14 @@ def test_bid_before_last_two_minutes_does_not_extend(seller, ana):
 
 # --- cancelamento, histórico e situação -----------------------------------------------------
 
-def test_lot_with_bids_cannot_be_cancelled(seller, ana):
+def test_lot_with_bids_needs_a_reason_to_be_cancelled(seller, ana):
     lot = live(seller)
     bid(ana, lot, "100.00")
 
     response = client_for(seller).post(f"/api/lots/{lot.pk}/cancel/")
 
     assert response.status_code == 400
-    assert "lances" in response.json()["detail"]
+    assert "motivo" in response.json()["detail"]
     lot.refresh_from_db()
     assert lot.status == Status.OPEN
 

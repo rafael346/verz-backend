@@ -32,7 +32,9 @@ def notify(lot_id, kind, sequence=None):
 def lot_state(lot):
     from .serializers import LotSerializer  # import tardio: serializers importa models
 
-    return {**LotSerializer(lot).data, "status": lot.status}
+    from .serializers import cancellation_payload
+
+    return {**LotSerializer(lot).data, "status": lot.status, "cancellation": cancellation_payload(lot)}
 
 
 def bid_data(bid):

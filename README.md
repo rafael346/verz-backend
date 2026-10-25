@@ -106,7 +106,7 @@ e `localhost` tenta o IPv6 antes, o que deixa cada conexão esperando 30 s.
 ## Testes
 
 ```bash
-pytest           # 203 testes; usa o Postgres do DATABASE_URL (cria e apaga um banco de teste)
+pytest           # 223 testes; usa o Postgres do DATABASE_URL (cria e apaga um banco de teste)
 ```
 
 Os testes cobrem as regras de lance (incremento, saldo comprometido, anti-sniping, corrida entre lances), a carteira
@@ -136,6 +136,11 @@ Principais rotas (todas sob `/api/`):
 
 **Resiliência:** os lotes guardam uma cópia da obra (dados e imagem). Vitrine, salas, auditoria e comprovante
 funcionam com a API do museu fora do ar; só a busca do leiloeiro fica indisponível, com mensagem clara.
+
+**Cancelamento e estorno:** o leiloeiro cancela lote agendado ou ao vivo (com lances, informando o motivo) e lote
+arrematado até 7 dias depois. Antes do arremate, o saldo reservado de quem estava ganhando é liberado na hora; depois,
+o valor volta ao arrematante e sai do saldo do leiloeiro, em lançamentos que o banco impede de repetir. O motivo aparece
+para os licitantes, no comprovante e na auditoria.
 
 **Histórico à prova de adulteração:** cada lance é selado com HMAC-SHA256 encadeado ao anterior, e o estado do lote
 tem um selo próprio. A chave fica fora do banco, triggers impedem alterar ou apagar lances e comprovantes, e a
