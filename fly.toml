@@ -9,9 +9,13 @@ primary_region = "gru"
 
 [env]
   ALLOWED_HOSTS = "verz-api.fly.dev"
-  # A Fly acrescenta ao X-Forwarded-For o IP do cliente e depois o da própria borda (66.241.x); 2 = pega o do cliente
-  # e ignora o que ele forjar antes (conferido em 2026-10-27, ver README).
-  NUM_PROXIES = "2"
+  # O front na Vercel repassa /api/ para cá (rewrite); o navegador manda a origem dele, não a da Fly.
+  CSRF_TRUSTED_ORIGINS = "https://verz-frontend.vercel.app"
+  # Pela Vercel o X-Forwarded-For chega "cliente, saída da Vercel (54.x), borda da Fly (66.241.x)"; 3 = o cliente
+  # (conferido em 2026-10-27, ver README).
+  # shortcut: quem chama verz-api.fly.dev direto pode forjar o IP e escapar dos limites por IP (o de login por e-mail
+  # continua valendo); para fechar, deixe a API sem IP público e aceite só o tráfego vindo do front.
+  NUM_PROXIES = "3"
 
 [processes]
   app = "uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --no-proxy-headers --no-server-header"
