@@ -18,9 +18,6 @@ if len(AUDIT_HMAC_KEY) < 32:
 if not DEBUG and any(key.startswith("troque") for key in (SECRET_KEY, AUDIT_HMAC_KEY)):
     raise ImproperlyConfigured("SECRET_KEY e AUDIT_HMAC_KEY ainda têm o valor de exemplo; gere chaves novas.")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
-# O Render define o domínio público do serviço (xxx.onrender.com); assim não é preciso repeti-lo no ALLOWED_HOSTS.
-if render_host := env("RENDER_EXTERNAL_HOSTNAME", default=""):
-    ALLOWED_HOSTS.append(render_host)
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 INSTALLED_APPS = [
