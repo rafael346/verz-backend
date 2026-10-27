@@ -12,6 +12,14 @@ def test_health_returns_ok_with_security_headers(client):
     assert "default-src 'none'" in response["Content-Security-Policy"]
 
 
+def test_proxy_secret_blocks_direct_calls(client, settings):
+    settings.PROXY_SECRET = "segredo-do-front"
+
+    assert client.get("/api/health/", secure=True).status_code == 403
+    assert client.get("/api/health/", secure=True, headers={"X-Verz-Proxy": "errado"}).status_code == 403
+    assert client.get("/api/health/", secure=True, headers={"X-Verz-Proxy": "segredo-do-front"}).status_code == 200
+
+
 def test_passwords_use_argon2():
     assert identify_hasher(make_password("senha-segura-123")).algorithm == "argon2"
 

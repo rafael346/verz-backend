@@ -19,6 +19,8 @@ if not DEBUG and any(key.startswith("troque") for key in (SECRET_KEY, AUDIT_HMAC
     raise ImproperlyConfigured("SECRET_KEY e AUDIT_HMAC_KEY ainda têm o valor de exemplo; gere chaves novas.")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+# Segredo que o proxy do front (Vercel) manda em X-Verz-Proxy; vazio desliga a checagem (core.middleware).
+PROXY_SECRET = env("PROXY_SECRET", default="")
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -37,6 +39,7 @@ AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "core.middleware.ProxySecretMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
