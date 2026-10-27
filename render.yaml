@@ -1,0 +1,49 @@
+# Blueprint do Render: API + worker de liquidação + Postgres. Só o backend por enquanto (o front e o nginx da D21 ficam
+# para depois, porque *.onrender.com é sufixo público e o cookie de sessão não vale entre front e API em subdomínios dele).
+envVarGroups:
+  - name: verz-secrets
+    envVars:
+      # Gerados uma vez no primeiro deploy e reaproveitados pela API e pelo worker. A AUDIT_HMAC_KEY nunca pode mudar:
+      # trocá-la invalida a cadeia de todos os lances já gravados (D06).
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AUDIT_HMAC_KEY
+        generateValue: true
+
+databases:
+  - name: verz-db
+    databaseName: verz
+    user: verz
+    plan: basic-256mb
+    region: virginia
+    postgresMajorVersion: "17"
+    ipAllowList: []  # sem acesso externo; só os serviços do Render na mesma região
+
+services:
+  - type: web
+    name: verz-api
+    runtime: docker
+    plan: starter  # o plano free hiberna (derruba o SSE) e não tem preDeployCommand
+    region: virginia
+    preDeployCommand: python manage.py migrate && python manage.py createcachetable
+    envVars:
+      - fromGroup: verz-secrets
+      - key: DATABASE_URL
+        fromDatabase: { name: verz-db, property: connectionString }
+      - key: PORT
+        value: "8000"  # a porta em que o CMD do Dockerfile escuta
+      # O proxy do Render acrescenta o IP do cliente ao X-Forwarded-For; 1 = confia só nesse último item.
+      # Confirme após o deploy (ver README): com 0, todos os usuários dividiriam o mesmo limite de login.
+      - key: NUM_PROXIES
+        value: "1"
+
+  - type: worker
+    name: verz-worker
+    runtime: docker
+    plan: starter  # worker não tem plano free
+    region: virginia
+    dockerCommand: python manage.py run_settlement
+    envVars:
+      - fromGroup: verz-secrets
+      - key: DATABASE_URL
+        fromDatabase: { name: verz-db, property: connectionString }
