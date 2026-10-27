@@ -9,8 +9,9 @@ primary_region = "gru"
 
 [env]
   ALLOWED_HOSTS = "verz-api.fly.dev"
-  # O proxy da Fly acrescenta o IP do cliente ao X-Forwarded-For; 1 = confia só nesse último item (ver README).
-  NUM_PROXIES = "1"
+  # A Fly acrescenta ao X-Forwarded-For o IP do cliente e depois o da própria borda (66.241.x); 2 = pega o do cliente
+  # e ignora o que ele forjar antes (conferido em 2026-10-27, ver README).
+  NUM_PROXIES = "2"
 
 [processes]
   app = "uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --no-proxy-headers --no-server-header"
@@ -26,7 +27,15 @@ primary_region = "gru"
   min_machines_running = 1
 
 [[vm]]
-  # 512 MB: cada login com Argon2 usa ~100 MB; com 256 MB, logins simultâneos derrubariam a máquina.
+  # 512 MB: com 256 MB a API morreu por falta de memória (OOM) no primeiro login; o Argon2 usa ~100 MB por login.
+  processes = ["app"]
   memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[[vm]]
+  # O worker não faz login (sem Argon2), então 256 MB bastam.
+  processes = ["worker"]
+  memory = "256mb"
   cpu_kind = "shared"
   cpus = 1
