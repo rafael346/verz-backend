@@ -11,7 +11,6 @@ o status dela aponta para a que a revê. As lacunas na numeração são decisõe
 ## Índice
 
 | Tema | Decisões | Resumo 
-|---|---|
 | Fundamentos | [D01](#d01) API de itens (substituída) · [D02](#d02) PostgreSQL · [D03](#d03) Tempo real com SSE · [D04](#d04) Sessão por cookie · [D05](#d05) Worker de liquidação · [D06](#d06) Integridade com HMAC · [D07](#d07) Arquitetura · [D08](#d08) Modelo e regras de lance · [D09](#d09) Pseudônimo por lote |
 | Backend | [D10](#d10) Contas · [D13](#d13) Carteira · [D14](#d14) Troca para o Met · [D15](#d15) Busca no acervo · [D16](#d16) Lotes e vitrine · [D17](#d17) Lances · [D18](#d18) Auditoria · [D19](#d19) Liquidação e comprovante · [D20](#d20) SSE na prática |
 | Frontend | [D21](#d21) Base e nginx · [D22](#d22) Identidade visual · [D23](#d23) Vitrine · [D24](#d24) Painel do leiloeiro · [D25](#d25) Sala, carteira e arremates · [D26](#d26) Auditoria e comprovante públicos |
@@ -19,11 +18,13 @@ o status dela aponta para a que a revê. As lacunas na numeração são decisõe
 | Produção | [D36](#d36) Segredo do proxy |
 
 
-# Resumo
+### Resumo
+---
  Esse resumo serve para contar um pouco como foi a minha trajetoria oa longo do desenvolvimento desse teste técnico.
- Como ao longo do processo tomei muitas decisões e descartei muitas fui anotando tudo e  ao final pedi para que a IA pudesse padronizar e exibir de forma mais formatada a fim de facilitar o entendimento e avaliação.
- Normalmente na escolha de tecnologias de um projeto eu faço uma avaliação antes de selecionar cada tecnologia, foi o mesmo caso desse projeto. O mesmo serve para o uso de IA, costumo fazer uma configuração especifica para cada projeto
- afim de evitar alucinações,melhorar a qualidade daquilo que e produzido, otimizar tempo e entrega sem perca de qualidade, e tambem visando a economia de tokens. Apesar de usar bastante a IA tudo aquilo que é produzido  eu reviso  e testo minuciosamente, tambem buscos possiveis falhas e  vunerabilidades em cada funncionalidade desenvolvida, sempre buscando minimizar o erro, boa parte disso nao consegui documentar pois ficaria um arquivo muito grande  e fugiria um pouco do que é pedido.
+ Como ao longo do processo tomei muitas decisões e descartei muitas fui anotando tudo e  ao final pedi para que a IA pudesse padronizar e exibir de forma mais formatada a fim de facilitar o entendimento e avaliação, essas decisões encontram-se a seguir nesse documento.
+ Normalmente na escolha de tecnologias de um projeto eu faço uma avaliação antes de selecionar cada tecnologia, foi o mesmo caso desse projeto. O mesmo serve para o uso de IA, costumo fazer uma configuração especifica para cada projeto afim de evitar alucinações,
+ melhorar a qualidade daquilo que e produzido, otimizar tempo e entrega sem perca de qualidade, e tambem visando a economia de tokens. Apesar de usar bastante a IA tudo aquilo que é produzido  eu reviso  e testo minuciosamente, tambem buscos possiveis falhas e  vunerabilidades em cada funncionalidade desenvolvida, 
+ sempre buscando minimizar os erros.
 ---
 
 # Fundamentos
