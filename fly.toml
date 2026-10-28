@@ -12,7 +12,7 @@ primary_region = "gru"
   # O front na Vercel repassa /api/ para cá (src/proxy.ts); o navegador manda a origem dele, não a da Fly.
   CSRF_TRUSTED_ORIGINS = "https://verz-frontend.vercel.app"
   # Pela Vercel o X-Forwarded-For chega "cliente, saída da Vercel (54.x), borda da Fly (66.241.x)"; 3 = o cliente
-  # (conferido em 2026-10-27, D35). Só o front chega aqui: a API recusa quem vem sem o segredo do proxy (D36).
+  # (conferido em 2026-10-27). Só o front chega aqui: a API recusa quem vem sem o segredo do proxy (D36).
   NUM_PROXIES = "3"
 
 [processes]

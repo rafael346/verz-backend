@@ -5,7 +5,7 @@ licitantes depositam saldo simulado, dão lances ao vivo e recebem um comprovant
 audita, sem login, se o histórico de lances foi adulterado.
 
 Django 6.1 + Django REST Framework, PostgreSQL 17, uvicorn (ASGI, por causa do tempo real). O front fica no
-repositório `verz-frontend`. As decisões do projeto, com o porquê de cada uma, estão em `../DECISOES.md`.
+repositório `verz-frontend`. As decisões do projeto, com o porquê de cada uma, estão em [`DECISOES.md`](DECISOES.md).
 
 ## Como rodar (Docker)
 
