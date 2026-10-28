@@ -12,3 +12,8 @@ class CsrfSessionAuthentication(SessionAuthentication):
         if result is None:
             self.enforce_csrf(request)
         return result
+
+    def authenticate_header(self, request):
+        # Com cabeçalho, o DRF responde 401 a quem está sem sessão (o front entende "sessão expirou");
+        # falta de permissão continua 403. "Session" não é um esquema do navegador: não abre janela de login.
+        return "Session"

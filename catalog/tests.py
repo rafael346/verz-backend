@@ -154,7 +154,7 @@ def test_bad_objects_from_the_museum_are_skipped_not_500(fake_met):
 
 def test_only_sellers_can_search(fake_met):
     assert search(client_with(Role.BIDDER)).status_code == 403
-    assert search(APIClient()).status_code == 403
+    assert search(APIClient()).status_code == 401
 
 
 @pytest.mark.parametrize("params", [

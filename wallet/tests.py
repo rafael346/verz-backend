@@ -72,8 +72,9 @@ def test_seller_cannot_deposit():
 def test_anonymous_cannot_read_or_deposit():
     client = APIClient()
 
-    assert client.get("/api/wallet/").status_code == 403
-    assert client.post("/api/wallet/deposit/", {"amount": "10.00"}, format="json").status_code == 403
+    # Sem sessão é 401 (o front entende "sessão expirou"); falta de permissão continua 403.
+    assert client.get("/api/wallet/").status_code == 401
+    assert client.post("/api/wallet/deposit/", {"amount": "10.00"}, format="json").status_code == 401
 
 
 def test_users_only_see_their_own_balance():

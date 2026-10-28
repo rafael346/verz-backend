@@ -139,6 +139,37 @@ def test_worker_command_settles_due_lots(sold_lot):
     assert f"lote {sold_lot.pk}: sold" in out.getvalue()
 
 
+def test_worker_waits_a_minute_before_retrying_a_failing_lot(seller, monkeypatch):
+    from .management.commands import run_settlement
+
+    broken = live(seller)
+    end_now(broken)
+    attempts, rounds = [], []
+
+    def explode(lot_id):
+        attempts.append(lot_id)
+        raise RuntimeError("erro que se repete")
+
+    def next_round(_seconds):
+        rounds.append(1)
+        if len(rounds) == 3:
+            raise KeyboardInterrupt  # sai do loop, que só segura Exception
+        if len(rounds) == 2:
+            clock[0] += run_settlement.FAILED_RETRY_SECONDS  # passou o minuto de espera
+
+    clock = [1000.0]
+    monkeypatch.setattr(settlement, "settle_lot", explode)
+    monkeypatch.setattr(run_settlement.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(run_settlement.time, "sleep", next_round)
+    monkeypatch.setattr(run_settlement, "call_command", lambda *args: None)  # sem clearsessions
+
+    with pytest.raises(KeyboardInterrupt):
+        call_command("run_settlement", stdout=io.StringIO())
+
+    # 1ª volta tenta e falha; 2ª, dentro do minuto, pula; 3ª, depois do minuto, tenta de novo.
+    assert attempts == [broken.pk, broken.pk]
+
+
 @pytest.mark.django_db(transaction=True)
 def test_two_workers_at_once_settle_a_lot_only_once(seller):
     lot = live(seller)

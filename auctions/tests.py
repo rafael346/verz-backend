@@ -157,7 +157,7 @@ def test_create_lot_for_artwork_that_cannot_be_auctioned(museum, seller):
 def test_only_sellers_create_lots(museum):
     assert client_for(make_user("b@example.com", Role.BIDDER)).post(
         "/api/lots/", payload(), format="json").status_code == 403
-    assert client_for().post("/api/lots/", payload(), format="json").status_code == 403
+    assert client_for().post("/api/lots/", payload(), format="json").status_code == 401
     assert museum["calls"] == 0
 
 
@@ -323,7 +323,7 @@ def test_only_the_owner_can_cancel(seller):
         f"/api/lots/{lot.pk}/cancel/").status_code == 404
     assert client_for(make_user("b@example.com", Role.BIDDER)).post(
         f"/api/lots/{lot.pk}/cancel/").status_code == 403
-    assert client_for().post(f"/api/lots/{lot.pk}/cancel/").status_code == 403
+    assert client_for().post(f"/api/lots/{lot.pk}/cancel/").status_code == 401
     lot.refresh_from_db()
     assert lot.status == Status.OPEN
 

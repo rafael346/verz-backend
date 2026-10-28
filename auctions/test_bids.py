@@ -114,7 +114,7 @@ def test_sellers_and_anonymous_cannot_bid(seller):
 
     assert bid(seller, lot, "100.00").status_code == 403
     assert bid(make_user("outro@example.com", Role.SELLER), lot, "100.00").status_code == 403
-    assert APIClient().post(f"/api/lots/{lot.pk}/bids/", {"amount": "100.00"}, format="json").status_code == 403
+    assert APIClient().post(f"/api/lots/{lot.pk}/bids/", {"amount": "100.00"}, format="json").status_code == 401
 
 
 def test_bid_on_cancelled_lot_is_not_found(seller, ana):
